@@ -1,8 +1,12 @@
-use std::process::{Command, Stdio, Child};
 use std::io::Read;
+use std::process::{Child, Command, Stdio};
 
 fn exec(image: &str, args: Vec<&str>) -> Result<Child, Box<dyn std::error::Error>> {
-    let child = Command::new(image).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()?;
+    let child = Command::new(image)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
     Ok(child)
 }
 

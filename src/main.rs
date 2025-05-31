@@ -1,3 +1,6 @@
+use serde::{Deserialize, Serialize};
+use surrealdb::{RecordId, Surreal, engine::local::RocksDb};
+
 use std::io::Read;
 use std::process::{Child, Command, Stdio};
 
@@ -10,7 +13,8 @@ fn exec(image: &str, args: Vec<&str>) -> Result<Child, Box<dyn std::error::Error
     Ok(child)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut child = exec("java", vec!["-jar", "minecraft_server.jar"])?;
     std::thread::sleep(std::time::Duration::from_secs(60));
     let mut buf: [u8; 512] = [0; 512];

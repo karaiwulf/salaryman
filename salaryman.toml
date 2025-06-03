@@ -1,0 +1,15 @@
+address = "0.0.0.0"
+port = 8080
+
+[[service]]
+name = "minecraft"
+command = "java"
+args = "-jar minecraft_server.jar"
+directory = "/minecraft/data"
+autostart = false
+
+[[service]]
+name = "derpcraft"
+command = "java"
+args = "-jar minecraft_server.jar"
+autostart = true

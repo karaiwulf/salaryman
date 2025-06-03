@@ -1,21 +1,15 @@
-use serde::{
-    Deserialize,
-    Serialize,
-};
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 
 use tokio::fs::read_to_string;
+use tokio::fs::write;
 
 use std::{
     fs::canonicalize,
     io::Read,
-    process::{
-        Child,
-        Command,
-        Stdio
-    },
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::PathBuf,
-    net::IpAddr,
+    process::{Child, Command, Stdio},
 };
 
 #[derive(Parser)]
@@ -29,25 +23,27 @@ struct Args {
     port: Option<u16>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Service {
     name: String,
     command: String,
-    args: String,
+    args: Option<String>,
     directory: Option<PathBuf>,
+    autostart: bool,
 }
 impl Service {
     fn new() -> Self {
         Self {
             name: String::new(),
             command: String::new(),
-            args: String::new(),
+            args: None,
             directory: None,
+            autostart: false,
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Config {
     address: Option<IpAddr>,
     port: Option<u16>,
@@ -63,7 +59,11 @@ impl Config {
     }
 }
 
-fn exec(image: &str, args: Vec<&str>, dir: Option<PathBuf>) -> Result<Child, Box<dyn std::error::Error>> {
+fn exec(
+    image: &str,
+    args: Vec<&str>,
+    dir: Option<PathBuf>,
+) -> Result<Child, Box<dyn std::error::Error>> {
     if let Some(cwd) = dir {
         let child = Command::new(image)
             .args(args)
@@ -84,30 +84,34 @@ fn exec(image: &str, args: Vec<&str>, dir: Option<PathBuf>) -> Result<Child, Box
     }
 }
 
-async fn load_config(file: PathBuf) -> Result<Config, Box<dyn std::error::Error>> {
-    let config: Config = toml::from_str(read_to_string(file).await?.as_str())?;
-    Ok(config)
+async fn load_config(file: PathBuf) -> Config {
+    let s: String = match read_to_string(file).await {
+        Ok(s) => s,
+        Err(_) => String::new(),
+    };
+    match toml::from_str(s.as_str()) {
+        Ok(c) => c,
+        Err(_) => Config::new(),
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let mut conf: Config = Config::new();
-    if let Some(file) = args.config.as_deref() {
-        conf = load_config(PathBuf::from(file)).await?;
-    } else {
-        conf = load_config(PathBuf::from("salaryman.toml")).await?;
-    }
-    
-    let mut child = exec("java", vec!["-jar", "minecraft_server.jar"], None)?;
-    std::thread::sleep(std::time::Duration::from_secs(60));
-    let mut buf: [u8; 512] = [0; 512];
-    let mut ebuf: [u8; 512] = [0; 512];
-    child.stdout.as_mut().unwrap().read(&mut buf[..])?;
-    child.stderr.as_mut().unwrap().read(&mut ebuf[..])?;
-    println!("{}", String::from_utf8_lossy(&buf));
-    println!("{}", String::from_utf8_lossy(&ebuf));
-    child.kill()?;
+    let conf: Config = load_config(PathBuf::from("salaryman.toml")).await;
+
+    println!("{conf:?}");
+
+    /*
+        let mut child = exec("java", vec!["-jar", "minecraft_server.jar"], None)?;
+        std::thread::sleep(std::time::Duration::from_secs(60));
+        let mut buf: [u8; 512] = [0; 512];
+        let mut ebuf: [u8; 512] = [0; 512];
+        child.stdout.as_mut().unwrap().read(&mut buf[..])?;
+        child.stderr.as_mut().unwrap().read(&mut ebuf[..])?;
+        println!("{}", String::from_utf8_lossy(&buf));
+        println!("{}", String::from_utf8_lossy(&ebuf));
+        child.kill()?;
+    */
     Ok(())
 }
-

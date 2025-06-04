@@ -4,12 +4,12 @@ port = 8080
 [[service]]
 name = "minecraft"
 command = "java"
-args = "-jar minecraft_server.jar"
-directory = "/minecraft/data"
-autostart = false
+args = "-jar minecraft_server.jar nogui"
+directory = "/home/yuzu/minecraft"
+autostart = true
 
 [[service]]
 name = "derpcraft"
 command = "java"
 args = "-jar minecraft_server.jar"
-autostart = true
+autostart = false

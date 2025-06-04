@@ -1,53 +1,52 @@
+pub mod model;
+
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
 use tokio::fs::read_to_string;
-use tokio::fs::write;
 
 use std::{
-    fs::canonicalize,
-    io::Read,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::IpAddr,
     path::PathBuf,
-    process::{Child, Command, Stdio},
+    sync::Arc,
 };
 
-#[derive(Parser)]
+use crate::model::{Service, ServiceConf};
+
+#[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, value_name = "FILE")]
-    config: Option<PathBuf>,
-    #[arg(short, long, value_name = "ADDR")]
-    address: Option<IpAddr>,
-    #[arg(short, long, value_name = "PORT")]
-    port: Option<u16>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Service {
-    name: String,
-    command: String,
-    args: Option<String>,
-    directory: Option<PathBuf>,
-    autostart: bool,
-}
-impl Service {
-    fn new() -> Self {
-        Self {
-            name: String::new(),
-            command: String::new(),
-            args: None,
-            directory: None,
-            autostart: false,
-        }
-    }
+    #[arg(
+        short,
+        long,
+        value_name = "FILE",
+        help = "config file override",
+        default_value = "salaryman.toml"
+    )]
+    config: PathBuf,
+    #[arg(
+        short,
+        long,
+        value_name = "ADDR",
+        help = "IP address to bind API to",
+        default_value = "127.0.0.1"
+    )]
+    address: IpAddr,
+    #[arg(
+        short,
+        long,
+        value_name = "PORT",
+        help = "TCP Port to bind API to",
+        default_value = "3080"
+    )]
+    port: u16,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Config {
     address: Option<IpAddr>,
     port: Option<u16>,
-    service: Vec<Service>,
+    service: Vec<ServiceConf>,
 }
 impl Config {
     fn new() -> Self {
@@ -59,32 +58,7 @@ impl Config {
     }
 }
 
-fn exec(
-    image: &str,
-    args: Vec<&str>,
-    dir: Option<PathBuf>,
-) -> Result<Child, Box<dyn std::error::Error>> {
-    if let Some(cwd) = dir {
-        let child = Command::new(image)
-            .args(args)
-            .current_dir(canonicalize(cwd)?)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        Ok(child)
-    } else {
-        let child = Command::new(image)
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        Ok(child)
-    }
-}
-
-async fn load_config(file: PathBuf) -> Config {
+async fn load_config(file: &PathBuf) -> Config {
     let s: String = match read_to_string(file).await {
         Ok(s) => s,
         Err(_) => String::new(),
@@ -98,20 +72,47 @@ async fn load_config(file: PathBuf) -> Config {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let conf: Config = load_config(PathBuf::from("salaryman.toml")).await;
-
-    println!("{conf:?}");
-
-    /*
-        let mut child = exec("java", vec!["-jar", "minecraft_server.jar"], None)?;
-        std::thread::sleep(std::time::Duration::from_secs(60));
-        let mut buf: [u8; 512] = [0; 512];
-        let mut ebuf: [u8; 512] = [0; 512];
-        child.stdout.as_mut().unwrap().read(&mut buf[..])?;
-        child.stderr.as_mut().unwrap().read(&mut ebuf[..])?;
-        println!("{}", String::from_utf8_lossy(&buf));
-        println!("{}", String::from_utf8_lossy(&ebuf));
-        child.kill()?;
-    */
+    let conf: Config = load_config(&args.config).await;
+    let mut services: Vec<Service> = Vec::new();
+    for i in 0..conf.service.len() {
+        services.push(Service::from_conf(conf.service[i].clone()));
+        if conf.service[i].autostart {
+            services[i].start()?;
+        }
+    }
+    for i in 0..services.len() {
+        println!("loop -1");
+        if let Ok(s) = services[i].stdout() {
+            for line in s.lines() {
+                println!("STDOUT :: [{}] :: {}", services[i].config.name, line);
+            }
+        }
+        if let Ok(s) = services[i].stderr() {
+            for line in s.lines() {
+                println!("STDERR :: [{}] :: {}", services[i].config.name, line);
+            }
+        }
+    }
+    for e in 0..100 {
+        println!("loop {e}");
+        for i in 0..services.len() {
+            if let Ok(s) = services[i].stdout() {
+                for line in s.lines() {
+                    println!("STDOUT :: [{}] :: {}", services[i].config.name, line);
+                }
+            }
+            if let Ok(s) = services[i].stderr() {
+                for line in s.lines() {
+                    println!("STDERR :: [{}] :: {}", services[i].config.name, line);
+                }
+            }
+        };
+    }
+    for mut service in services {
+        match service.stop() {
+            Ok(_) => println!("lol it was killed"),
+            Err(_) => println!("it either didn't exist, or failed to kill"),
+        }
+    }
     Ok(())
 }

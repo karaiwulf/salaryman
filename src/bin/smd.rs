@@ -72,21 +72,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         services.push(Service::from_conf(&conf.service[i]));
         if conf.service[i].autostart {
             services[i].start().await?;
+            services[i].scan_stdout().await?;
+            services[i].scan_stderr().await?;
         }
     }
-    let mut outs: Vec<(String, tokio::sync::mpsc::Receiver<String>)> = Vec::new();
+    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+    println!("trying to write to stdin!");
     for i in 0..services.len() {
-        if services[i].started().await {
-            outs.push((services[i].name().await, services[i].scan_stdout().await?));
-        }
+        services[i].write_stdin("stop\n".into()).await?;
     }
-    for _i in 0..100 {
-        for out in 0..outs.len() {
-            if let Some(s) = outs[out].1.recv().await {
-                println!("got line from {} :: {}", outs[out].0, s);
-            }
-        }
-    }
+    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
     for mut service in services {
         match service.stop().await {
             Ok(_) => println!("lol it was killed"),

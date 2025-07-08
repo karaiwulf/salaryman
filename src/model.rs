@@ -61,8 +61,8 @@ impl ServiceConf {
 pub struct Service {
     conf: ServiceConf,
     proc: Option<Arc<Mutex<Child>>>,
-    stdout: Option<Arc<Mutex<Receiver<String>>>>,
-    stderr: Option<Arc<Mutex<Receiver<String>>>>,
+    pub stdout: Option<Arc<Mutex<Receiver<String>>>>,
+    pub stderr: Option<Arc<Mutex<Receiver<String>>>>,
 }
 impl Default for Service {
     fn default() -> Self {
@@ -109,23 +109,17 @@ impl Service {
             )));
         }
         let cmd = &self.conf.command;
-        let args = if let Some(a) = &self.conf.args {
-            a.split_whitespace()
-        } else {
-            "".split_whitespace()
+        let mut proc = Command::new(cmd);
+        proc.stdin(Stdio::piped());
+        proc.stdout(Stdio::piped());
+        proc.stderr(Stdio::piped());
+        if let Some(a) = &self.conf.args {
+            proc.args(a.split_whitespace());
         };
-        let cwd = if let Some(c) = &self.conf.directory {
-            c
-        } else {
-            &PathBuf::from("/")
+        if let Some(c) = &self.conf.directory {
+            proc.current_dir(c);
         };
-        let child = Command::new(cmd)
-            .args(args)
-            .current_dir(cwd)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+        let child = proc.spawn()?;
         self.proc = Some(Arc::new(Mutex::new(child)));
         Ok(())
     }
@@ -217,7 +211,7 @@ impl Service {
             spawn(async move {
                 let mut br = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = br.next_line().await {
-                    println!("ERR :: {} :: {}", &sname, &line);
+                    eprintln!("{} :: {}", &sname, &line);
                     if let Err(_) = tx.send(line).await {
                         return;
                     };
@@ -247,6 +241,7 @@ impl Service {
                 )));
             };
             stdin.write(&buf.as_bytes()).await?;
+            stdin.flush().await?;
             Ok(())
         } else {
             Err(Box::new(std::io::Error::new(

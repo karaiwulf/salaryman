@@ -1,17 +1,11 @@
-pub mod model;
-
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
 use tokio::fs::read_to_string;
 
-use std::{
-    net::IpAddr,
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{net::IpAddr, path::PathBuf};
 
-use crate::model::{Service, ServiceConf};
+use salaryman::model::{Service, ServiceConf};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -75,41 +69,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let conf: Config = load_config(&args.config).await;
     let mut services: Vec<Service> = Vec::new();
     for i in 0..conf.service.len() {
-        services.push(Service::from_conf(conf.service[i].clone()));
+        services.push(Service::from_conf(&conf.service[i]));
         if conf.service[i].autostart {
-            services[i].start()?;
+            services[i].start().await?;
         }
     }
+    let mut outs: Vec<(String, tokio::sync::mpsc::Receiver<String>)> = Vec::new();
     for i in 0..services.len() {
-        println!("loop -1");
-        if let Ok(s) = services[i].stdout() {
-            for line in s.lines() {
-                println!("STDOUT :: [{}] :: {}", services[i].config.name, line);
-            }
-        }
-        if let Ok(s) = services[i].stderr() {
-            for line in s.lines() {
-                println!("STDERR :: [{}] :: {}", services[i].config.name, line);
-            }
+        if services[i].started().await {
+            outs.push((services[i].name().await, services[i].scan_stdout().await?));
         }
     }
-    for e in 0..100 {
-        println!("loop {e}");
-        for i in 0..services.len() {
-            if let Ok(s) = services[i].stdout() {
-                for line in s.lines() {
-                    println!("STDOUT :: [{}] :: {}", services[i].config.name, line);
-                }
+    for _i in 0..100 {
+        for out in 0..outs.len() {
+            if let Some(s) = outs[out].1.recv().await {
+                println!("got line from {} :: {}", outs[out].0, s);
             }
-            if let Ok(s) = services[i].stderr() {
-                for line in s.lines() {
-                    println!("STDERR :: [{}] :: {}", services[i].config.name, line);
-                }
-            }
-        };
+        }
     }
     for mut service in services {
-        match service.stop() {
+        match service.stop().await {
             Ok(_) => println!("lol it was killed"),
             Err(_) => println!("it either didn't exist, or failed to kill"),
         }

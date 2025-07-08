@@ -2,14 +2,9 @@ address = "0.0.0.0"
 port = 8080
 
 [[service]]
-name = "minecraft"
-command = "java"
-args = "-jar minecraft_server.jar nogui"
-directory = "/home/yuzu/minecraft"
+name = "cattest"
+command = "cat"
+args = "/var/log/messages"
+directory = "/"
 autostart = true
 
-[[service]]
-name = "derpcraft"
-command = "java"
-args = "-jar minecraft_server.jar"
-autostart = false

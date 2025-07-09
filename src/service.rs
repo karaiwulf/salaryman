@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -8,11 +9,13 @@ use tokio::{
     },
     task::spawn,
 };
+use uuid::Uuid;
 
 use std::{path::PathBuf, process::Stdio, sync::Arc};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 pub struct ServiceConf {
+    pub uuid: Uuid,
     pub name: String,
     pub command: String,
     pub args: Option<String>,
@@ -30,6 +33,7 @@ impl ServiceConf {
      */
     pub fn new() -> Self {
         Self {
+            uuid: Uuid::new_v4(),
             name: String::new(),
             command: String::new(),
             args: None,
@@ -41,6 +45,7 @@ impl ServiceConf {
      *  Returns a new `ServiceConf` from parts.
      */
     pub fn from_parts(
+        uuid: Uuid,
         name: String,
         command: String,
         args: Option<String>,
@@ -48,6 +53,26 @@ impl ServiceConf {
         autostart: bool,
     ) -> Self {
         Self {
+            uuid,
+            name,
+            command,
+            args,
+            directory,
+            autostart,
+        }
+    }
+    /**
+     *  Returns a new `ServiceConf` from parts with new uuid.
+     */
+    pub fn new_from_parts(
+        name: String,
+        command: String,
+        args: Option<String>,
+        directory: Option<PathBuf>,
+        autostart: bool,
+    ) -> Self {
+        Self {
+            uuid: Uuid::new_v4(),
             name,
             command,
             args,
@@ -174,10 +199,11 @@ impl Service {
             drop(lock);
             let (tx, rx) = channel(1024);
             let sname = self.conf.name.clone();
+            let suuid = self.conf.uuid.clone();
             spawn(async move {
                 let mut br = BufReader::new(stdout).lines();
                 while let Ok(Some(line)) = br.next_line().await {
-                    println!("{} :: {}", &sname, &line);
+                    println!("{} ({}) :: {}", &suuid, &sname, &line);
                     if let Err(_) = tx.send(line).await {
                         return;
                     };
@@ -210,10 +236,11 @@ impl Service {
             drop(lock);
             let (tx, rx) = channel(1024);
             let sname = self.conf.name.clone();
+            let suuid = self.conf.uuid.clone();
             spawn(async move {
                 let mut br = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = br.next_line().await {
-                    eprintln!("{} :: {}", &sname, &line);
+                    eprintln!("{} ({}) >< {}", &suuid, &sname, &line);
                     if let Err(_) = tx.send(line).await {
                         return;
                     };
@@ -251,5 +278,12 @@ impl Service {
                 "No Process Associated with Service",
             )))
         }
+    }
+    /**
+     *  Writes a line to the service process' stdin, if it exists.
+     */
+    #[inline]
+    pub async fn writeln_stdin(&mut self, buf: String) -> Result<(), Box<dyn std::error::Error>> {
+        self.write_stdin(format!("{}\n", buf)).await
     }
 }

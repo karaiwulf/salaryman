@@ -7,13 +7,21 @@ description = "A very simple service management framework"
 
 [features]
 default = ["smd"]
-smd = ["dep:clap", "dep:toml"]
+smd = [
+	"dep:clap",
+	"dep:dropshot",
+	"dep:schemars",
+	"dep:toml",
+]
 
 [dependencies]
 clap = { version = "4.5.39", features = ["derive"], optional = true }
+dropshot = { version = "0.16.2", features = ["usdt","usdt-probes"], optional = true }
+schemars = { version = "0.8.22", features = ["uuid1"], optional = true }
 serde = { version = "1.0.219", features = ["derive"] }
 tokio = { version = "1.45.1", features = ["full"] }
 toml = { version = "0.8.22", optional = true }
+uuid = { version = "1.17.0", features = ["v4", "serde"] }
 
 [[bin]]
 name = "smd"

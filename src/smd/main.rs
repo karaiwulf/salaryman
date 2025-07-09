@@ -1,11 +1,17 @@
+mod context;
 mod endpoints;
 
 use clap::Parser;
+use dropshot::{ApiDescription, ConfigLogging, ConfigLoggingLevel, ServerBuilder};
 use salaryman::service::{Service, ServiceConf};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::fs::read_to_string;
+use tokio::{fs::read_to_string, sync::Mutex};
 
-use std::{net::IpAddr, path::PathBuf};
+use std::{net::IpAddr, path::PathBuf, sync::Arc};
+
+use crate::context::SalarymanDContext;
+use crate::endpoints::{endpoint_get_config, endpoint_post_stdin};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -36,11 +42,28 @@ struct Args {
     port: u16,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Config {
-    address: Option<IpAddr>,
-    port: Option<u16>,
-    service: Vec<ServiceConf>,
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+pub struct User {
+    pub username: String,
+    pub token: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+pub struct Config {
+    pub address: Option<IpAddr>,
+    pub port: Option<u16>,
+    pub user: Vec<User>,
+    pub service: Vec<ServiceConf>,
+}
+impl Config {
+    pub fn new() -> Self {
+        Self {
+            address: None,
+            port: None,
+            user: Vec::new(),
+            service: Vec::new(),
+        }
+    }
 }
 
 async fn load_config(file: &PathBuf) -> Result<Config, Box<dyn std::error::Error>> {
@@ -66,26 +89,26 @@ async fn load_config(file: &PathBuf) -> Result<Config, Box<dyn std::error::Error
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let conf: Config = load_config(&args.config).await?;
-    let mut services: Vec<Service> = Vec::new();
+    let mut services: Vec<Arc<Mutex<Service>>> = Vec::new();
     for i in 0..conf.service.len() {
-        services.push(Service::from_conf(&conf.service[i]));
+        services.push(Arc::new(Mutex::new(Service::from_conf(&conf.service[i]))));
         if conf.service[i].autostart {
-            services[i].start().await?;
-            services[i].scan_stdout().await?;
-            services[i].scan_stderr().await?;
+            let mut lock = services[i].lock().await;
+            lock.start().await?;
+            lock.scan_stdout().await?;
+            lock.scan_stderr().await?;
+            drop(lock);
         }
     }
-    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-    println!("trying to write to stdin!");
-    for i in 0..services.len() {
-        services[i].write_stdin("stop\n".into()).await?;
-    }
-    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-    for mut service in services {
-        match service.stop().await {
-            Ok(_) => println!("lol it was killed"),
-            Err(_) => println!("it either didn't exist, or failed to kill"),
-        }
-    }
+    let log_conf = ConfigLogging::StderrTerminal {
+        level: ConfigLoggingLevel::Info,
+    };
+    let log = log_conf.to_logger("smd")?;
+    let ctx = Arc::new(SalarymanDContext::from_parts(conf, services));
+    let mut api = ApiDescription::new();
+    api.register(endpoint_get_config).unwrap();
+    api.register(endpoint_post_stdin).unwrap();
+    let server = ServerBuilder::new(api, ctx.clone(), log).start()?;
+    server.await?;
     Ok(())
 }

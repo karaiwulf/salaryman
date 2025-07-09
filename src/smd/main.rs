@@ -1,11 +1,11 @@
+mod endpoints;
+
 use clap::Parser;
 use serde::{Deserialize, Serialize};
-
 use tokio::fs::read_to_string;
+use salaryman::service::{Service, ServiceConf};
 
 use std::{net::IpAddr, path::PathBuf};
-
-use salaryman::model::{Service, ServiceConf};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -42,6 +42,7 @@ struct Config {
     port: Option<u16>,
     service: Vec<ServiceConf>,
 }
+/*
 impl Config {
     fn new() -> Self {
         Self {
@@ -51,22 +52,23 @@ impl Config {
         }
     }
 }
+*/
 
-async fn load_config(file: &PathBuf) -> Config {
+async fn load_config(file: &PathBuf) -> Result<Config, Box<dyn std::error::Error>> {
     let s: String = match read_to_string(file).await {
         Ok(s) => s,
-        Err(_) => String::new(),
+        Err(_) => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "cannot find config file"))),
     };
     match toml::from_str(s.as_str()) {
-        Ok(c) => c,
-        Err(_) => Config::new(),
+        Ok(c) => Ok(c),
+        Err(_) => Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "unable to parse config file"))),
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let conf: Config = load_config(&args.config).await;
+    let conf: Config = load_config(&args.config).await?;
     let mut services: Vec<Service> = Vec::new();
     for i in 0..conf.service.len() {
         services.push(Service::from_conf(&conf.service[i]));
@@ -90,3 +92,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
+

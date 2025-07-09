@@ -1,9 +1,9 @@
 mod endpoints;
 
 use clap::Parser;
+use salaryman::service::{Service, ServiceConf};
 use serde::{Deserialize, Serialize};
 use tokio::fs::read_to_string;
-use salaryman::service::{Service, ServiceConf};
 
 use std::{net::IpAddr, path::PathBuf};
 
@@ -42,26 +42,23 @@ struct Config {
     port: Option<u16>,
     service: Vec<ServiceConf>,
 }
-/*
-impl Config {
-    fn new() -> Self {
-        Self {
-            address: None,
-            port: None,
-            service: Vec::new(),
-        }
-    }
-}
-*/
 
 async fn load_config(file: &PathBuf) -> Result<Config, Box<dyn std::error::Error>> {
     let s: String = match read_to_string(file).await {
         Ok(s) => s,
-        Err(_) => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "cannot find config file"))),
+        Err(_) => {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "cannot find config file",
+            )));
+        }
     };
     match toml::from_str(s.as_str()) {
         Ok(c) => Ok(c),
-        Err(_) => Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "unable to parse config file"))),
+        Err(_) => Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "unable to parse config file",
+        ))),
     }
 }
 
@@ -92,4 +89,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
-

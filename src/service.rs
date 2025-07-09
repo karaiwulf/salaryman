@@ -138,6 +138,8 @@ impl Service {
             lock.kill().await?;
             drop(lock);
             self.proc = None;
+            self.stdout = None;
+            self.stderr = None;
             Ok(())
         } else {
             Err(Box::new(std::io::Error::new(
@@ -170,7 +172,7 @@ impl Service {
                 )));
             };
             drop(lock);
-            let (tx, rx) = channel(100);
+            let (tx, rx) = channel(1024);
             let sname = self.conf.name.clone();
             spawn(async move {
                 let mut br = BufReader::new(stdout).lines();
@@ -206,7 +208,7 @@ impl Service {
                 )));
             };
             drop(lock);
-            let (tx, rx) = channel(100);
+            let (tx, rx) = channel(1024);
             let sname = self.conf.name.clone();
             spawn(async move {
                 let mut br = BufReader::new(stderr).lines();

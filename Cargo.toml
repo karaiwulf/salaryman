@@ -6,35 +6,72 @@ authors = ["Ren Kararou <ren@kararou.space>"]
 description = "A very simple service management framework"
 
 [features]
-default = ["smd"]
+default = ["models", "smd", "sm-cli"]
+models = []
 smd = [
 	"dep:clap",
 	"dep:dropshot",
-	"dep:schemars",
 	"dep:toml",
 	"dep:semver",
+	"models",
+]
+sm-cli = [
+	"dep:clap",
+	"dep:toml",
+	"dep:reqwest",
+	"models",
 ]
 
 [dependencies]
-clap = { version = "4.5.39", features = ["derive"], optional = true }
-dropshot = { version = "0.16.2", features = ["usdt","usdt-probes"], optional = true }
-schemars = { version = "0.8.22", features = ["uuid1"], optional = true }
+schemars = { version = "0.8.22", features = ["uuid1"] }
 semver = { version = "1.0.26", optional = true }
 serde = { version = "1.0.219", features = ["derive"] }
 tokio = { version = "1.45.1", features = ["full"] }
 toml = { version = "0.8.22", optional = true }
 uuid = { version = "1.17.0", features = ["v4", "serde"] }
 
+[dependencies.clap]
+version = "4.5.39"
+features = [
+	"derive",
+]
+optional = true
+
+[dependencies.dropshot]
+version = "0.16.2"
+features = [
+	"usdt",
+	"usdt-probes",
+]
+optional = true
+
+[dependencies.reqwest]
+version = "0.12.22"
+features = [
+	"gzip",
+	"cookies",
+	"brotli",
+	"zstd"
+]
+optional = true
+
 [[bin]]
 name = "smd"
-path = "src/smd/main.rs"
+path = "src/server/main.rs"
 test = false
 bench = false
 required-features = ["smd"]
 
+[[bin]]
+name = "sm"
+path = "src/cli/main.rs"
+test = false
+bench = false
+required-features = ["sm-cli"]
+
 [profile.release]
 strip = true
-lto = "thin"
+lto = true
 panic = "abort"
 codegen-units = 1
 

@@ -6,7 +6,7 @@ use dropshot::{ApiDescription, ConfigDropshot, ConfigLogging, ConfigLoggingLevel
 use salaryman::service::{Service, ServiceConf};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::{fs::read_to_string, sync::Mutex};
+use tokio::{fs::read_to_string, sync::RwLock};
 
 use std::{
     net::{IpAddr, SocketAddr},
@@ -16,7 +16,8 @@ use std::{
 
 use crate::context::{SalarymanDContext, SalarymanService};
 use crate::endpoints::{
-    endpoint_get_service, endpoint_get_services, endpoint_post_stdin, endpoint_restart_service,
+    endpoint_get_config, endpoint_get_config_save, endpoint_get_service, endpoint_get_services,
+    endpoint_post_service, endpoint_post_stdin, endpoint_put_config, endpoint_restart_service,
     endpoint_start_service, endpoint_stop_service,
 };
 
@@ -107,26 +108,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.port
     };
     let bind = SocketAddr::new(addr, port);
-    let mut services: Vec<Arc<SalarymanService>> = Vec::new();
+    let services: RwLock<Vec<Arc<SalarymanService>>> = RwLock::new(Vec::new());
     for i in 0..conf.service.len() {
-        services.push(Arc::new(SalarymanService::from_parts(
+        let mut lock = services.write().await;
+        lock.push(Arc::new(SalarymanService::from_parts(
             conf.service[i].clone(),
-            Arc::new(Mutex::new(Service::from_conf(&conf.service[i]))),
+            Arc::new(RwLock::new(Service::from_conf(&conf.service[i]))),
         )));
+        drop(lock);
     }
-    for i in 0..services.len() {
-        if services[i].config.autostart {
-            let mut lock = services[i].service.lock().await;
-            lock.start().await?;
-            lock.scan_stdout().await?;
-            lock.scan_stderr().await?;
+    let lock = services.write().await;
+    for i in 0..lock.len() {
+        if lock[i].config.autostart {
+            let mut l = lock[i].service.write().await;
+            l.start().await?;
+            l.scan_stdout().await?;
+            l.scan_stderr().await?;
+            drop(l);
         }
     }
+    drop(lock);
     let log_conf = ConfigLogging::StderrTerminal {
         level: ConfigLoggingLevel::Info,
     };
     let log = log_conf.to_logger("smd")?;
-    let ctx = Arc::new(SalarymanDContext::from_vec(services));
+    let ctx = Arc::new(SalarymanDContext::from_parts(
+        services,
+        args.config,
+        Arc::new(RwLock::new(conf)),
+    ));
     let config = ConfigDropshot {
         bind_address: bind,
         ..Default::default()
@@ -138,6 +148,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     api.register(endpoint_stop_service)?;
     api.register(endpoint_restart_service)?;
     api.register(endpoint_post_stdin)?;
+    api.register(endpoint_post_service)?;
+    api.register(endpoint_get_config)?;
+    api.register(endpoint_put_config)?;
+    api.register(endpoint_get_config_save)?;
     api.openapi("Salaryman", semver::Version::new(1, 0, 0))
         .write(&mut std::io::stdout())?;
     let server = ServerBuilder::new(api, ctx.clone(), log)

@@ -149,6 +149,17 @@ impl Service {
         Ok(())
     }
     /**
+     *  Calls self.start(), then self.scan_stdout(), and finally self.scan_stderr()
+     */
+    #[inline]
+    pub async fn start_with_output(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.start().await?;
+        self.scan_stdout().await?;
+        self.scan_stderr().await?;
+        Ok(())
+    }
+    //TODO: process monitoring!
+    /**
      *  Returns true when process is started and false when process is stopped.
      */
     pub async fn started(&self) -> bool {
@@ -176,9 +187,19 @@ impl Service {
     /**
      *  Restarts service process
      */
+    #[inline]
     pub async fn restart(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.stop().await?;
         self.start().await?;
+        Ok(())
+    }
+    /**
+     *  Restarts service process
+     */
+    #[inline]
+    pub async fn restart_with_output(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.stop().await?;
+        self.start_with_output().await?;
         Ok(())
     }
     /**

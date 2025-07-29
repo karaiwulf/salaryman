@@ -1,9 +1,4 @@
-address = "0.0.0.0"
-port = 8080
-
-[[user]]
-username = "yuzu"
-token = "some-super-secret-token"
+socket = "/tmp/salaryman.sock"
 
 [[service]]
 uuid = "4a8807b8-32ef-4cde-b9ed-8eabfd6cdb15"

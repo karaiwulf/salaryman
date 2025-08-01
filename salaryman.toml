@@ -8,3 +8,10 @@ args = "-jar /minecraft/server.jar nogui"
 directory = "/minecraft/data"
 autostart = true
 
+[[service]]
+uuid = "71cab92a-a301-4448-a6a5-ec6e9e2f57bb"
+name = "pacman-cat"
+command = "cat"
+args = "/var/log/pacman.log"
+autostart = true
+oneshot = true

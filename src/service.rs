@@ -21,6 +21,7 @@ pub struct ServiceConf {
     args: Option<String>,
     directory: Option<PathBuf>,
     autostart: bool,
+    oneshot: Option<bool>,
 }
 impl Default for ServiceConf {
     fn default() -> Self {
@@ -37,6 +38,7 @@ impl ServiceConf {
             args: None,
             directory: None,
             autostart: false,
+            oneshot: None,
         }
     }
     /// Returns a new `ServiceConf` from parts.
@@ -47,6 +49,7 @@ impl ServiceConf {
         args: Option<String>,
         directory: Option<PathBuf>,
         autostart: bool,
+        oneshot: Option<bool>,
     ) -> Self {
         Self {
             uuid,
@@ -55,6 +58,7 @@ impl ServiceConf {
             args,
             directory,
             autostart,
+            oneshot,
         }
     }
     /// Returns a new `ServiceConf` from parts with new uuid.
@@ -64,6 +68,7 @@ impl ServiceConf {
         args: Option<String>,
         directory: Option<PathBuf>,
         autostart: bool,
+        oneshot: Option<bool>,
     ) -> Self {
         Self {
             uuid: Uuid::new_v4(),
@@ -72,6 +77,7 @@ impl ServiceConf {
             args,
             directory,
             autostart,
+            oneshot,
         }
     }
     /// Returns the `uuid::Uuid` associated with the service config
@@ -98,6 +104,10 @@ impl ServiceConf {
     pub fn get_autostart(&self) -> bool {
         self.autostart
     }
+    /// Returns the oneshot value of the described service
+    pub fn get_oneshot(&self) -> &Option<bool> {
+        &self.oneshot
+    }
     /// Sets the name of the described service
     pub fn name(&mut self, name: &str) -> &mut Self {
         self.name = String::from(name);
@@ -121,6 +131,15 @@ impl ServiceConf {
     /// Sets the autostart value of the described service
     pub fn autostart(&mut self, autostart: bool) -> &mut Self {
         self.autostart = autostart;
+        self
+    }
+    /// Sets the oneshot flag for the described service
+    pub fn oneshot(&mut self, oneshot: bool) -> &mut Self {
+        if oneshot {
+            self.oneshot = Some(true);
+        } else {
+            self.oneshot = None;
+        }
         self
     }
     /// Builds a Service from this object
@@ -174,6 +193,15 @@ impl<'a> Service {
     #[inline]
     pub fn name(&self) -> &str {
         &self.config().get_name()
+    }
+    /// Returns the uuid of the service, shorthand for Service::config().get_uuid()
+    #[inline]
+    pub fn uuid(&self) -> &Uuid {
+        &self.config().get_uuid()
+    }
+    #[inline]
+    pub fn oneshot(&self) -> &Option<bool> {
+        &self.config().get_oneshot()
     }
     #[inline]
     fn create_dirs(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -243,14 +271,21 @@ impl<'a> Service {
         }
     }
     /// Returns the state of the service
-    pub fn state(&mut self) -> Result<ServiceState, Box<dyn std::error::Error>> {
+    pub fn state(&mut self) -> ServiceState {
         if let Some(proc) = self.proc.as_mut() {
             match proc.try_wait() {
-                Err(_) | Ok(Some(_)) => Ok(ServiceState::Failed),
-                Ok(None) => Ok(ServiceState::Running),
+                Err(_) | Ok(Some(_)) => {
+                    if let Some(b) = self.oneshot() {
+                        if *b {
+                            return ServiceState::Stopped;
+                        }
+                    }
+                    ServiceState::Failed
+                },
+                Ok(None) => ServiceState::Running,
             }
         } else {
-            Ok(ServiceState::Stopped)
+            ServiceState::Stopped
         }
     }
     /// Invokes kill on the service process
